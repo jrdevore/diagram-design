@@ -18,7 +18,8 @@ import json
 import re
 import urllib.parse
 from pathlib import Path
-from xml.sax.saxutils import quoteattr
+import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape, quoteattr
 
 SKILL = Path(__file__).resolve().parent.parent
 STYLE_GUIDE = SKILL / "references" / "style-guide.md"
@@ -180,7 +181,11 @@ def main():
     cfg = args.out / "drawio-config.json"
     lib = args.out / "diagram-design-library.xml"
     cfg.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    lib.write_text("<mxlibrary>" + json.dumps(library) + "</mxlibrary>\n", encoding="utf-8")
+    # draw.io parses the file as XML first and reads the JSON from its text, so the JSON must be XML-escaped.
+    lib.write_text("<mxlibrary>" + escape(json.dumps(library)) + "</mxlibrary>\n", encoding="utf-8")
+    root = ET.fromstring(lib.read_text(encoding="utf-8"))
+    if root.tag != "mxlibrary" or len(json.loads("".join(root.itertext()))) != len(library):
+        raise SystemExit(f"{lib} failed draw.io's XML-then-JSON read")
     print(f"Wrote {cfg}  (draw.io: Extras -> Configuration, paste, Apply, restart draw.io)")
     print(f"Wrote {lib}  ({len(library)} shapes; draw.io: File -> Open Library from -> Device)")
 
