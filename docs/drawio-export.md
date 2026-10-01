@@ -25,6 +25,7 @@ Exported: my-diagram.drawio
   36 shapes, 0 custom shapes, 0 embedded images
   8 connectors (4 attached to shapes)
   38 text runs (30 merged into shape labels)
+  layers: 3 background (locked), 31 diagram, 16 legend
 ```
 
 Optional shell alias (add to `~/.zshrc`):
@@ -56,6 +57,30 @@ truth for each diagram.
 3. To get back to a styled HTML diagram later, use `/diagram-design:import-drawio`
    in Claude. That redraws it in the skill's style; it isn't an exact round trip.
 
+## Layers
+
+Each export is split into up to three draw.io layers (*View → Layers*, or Ctrl/Cmd+Shift+L):
+
+| Layer | What goes in it | Default |
+|---|---|---|
+| **Background** | Swimlanes, zones and boundaries (any shape that contains a connected node), zone title tabs, lane labels, and arrowless divider lines and gridlines | **Locked**, so dragging a box can't grab a lane |
+| **Diagram** | Nodes, connectors, connector labels, icons, headings: everything else | Editable |
+| **Legend** | Everything from the `LEGEND` heading (or the divider line just above it) down | Editable; hide it with the eye icon |
+
+A layer only appears if something lands in it. A flowchart with no lanes gets no
+Background layer, and a diagram without a `LEGEND` heading gets no Legend layer.
+
+To edit a lane, unlock Background with the padlock icon in the Layers panel. If
+something lands in the wrong layer, select it and use *Move selection to…* in
+the Layers panel.
+
+The sorting is a guess based on shapes and positions:
+
+- **A box with nothing connected to it inside a zone stays in Diagram.** Only
+  boxes that a connector attaches to make their surrounding shape a lane or zone.
+- **Free text counts as a lane label only if it lines up with a lane label
+  already attached to a lane.** Same x position, font, size and colour.
+
 ## What converts, and how
 
 | In the HTML diagram | In draw.io |
@@ -76,9 +101,12 @@ internet access, draw.io falls back to a default font.
 
 - **Containers don't group their contents.** Moving a zone or boundary box
   leaves the boxes inside it where they are. Select everything you want to move.
-- **Connectors keep their original bend points.** Moving a box doesn't re-route
-  its arrows around other shapes. To let draw.io re-route one, select it and choose
-  *Clear Waypoints* (right-click menu), or pick an orthogonal connector style.
+- **Connectors keep their original bend points.** Right-angle connectors are
+  exported as draw.io's orthogonal, rounded style, and the original bends become
+  waypoints. Moving a box re-routes the connector's ends, but the waypoints stay
+  put. To let draw.io route a connector from scratch, select it and choose
+  *Clear Waypoints* (right-click menu). Diagonal and curved lines stay as plain
+  straight-segment or curved connectors.
 - **Text spacing can be off by a pixel or two**, because draw.io and the browser
   lay text out differently. Labels next to icons can overlap slightly.
 - **Charts become separate bars and text.** You can edit them, but they won't

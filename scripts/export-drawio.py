@@ -1016,6 +1016,20 @@ class Converter:
                 self.stats["texts_merged"] += 1
         self.items = keep
 
+    def style_connectors(self):
+        """Attached right-angle connectors become draw.io orthogonal, rounded connectors, so they re-route
+        cleanly when a box moves. Diagonal and curved lines keep their exact geometry."""
+        for e in self.items:
+            if e["kind"] != "edge" or e["style"].get("curved"):
+                continue
+            pts = e["points"]
+            if not all(abs(a[0] - b[0]) < 0.5 or abs(a[1] - b[1]) < 0.5 for a, b in zip(pts, pts[1:])):
+                continue
+            e["style"]["rounded"] = 1
+            e["style"].setdefault("arcSize", 16)
+            if "source" in e or "target" in e:
+                e["style"]["edgeStyle"] = "orthogonalEdgeStyle"
+
     def connect_edges(self):
         vertices = [(idx, v) for idx, v in enumerate(self.items) if v["kind"] == "vertex"]
 
@@ -1159,6 +1173,93 @@ class Converter:
             value = "".join(divs)
         return value
 
+    def assign_layers(self):
+        """Background: lanes/zones that hold connected nodes, plus unattached arrowless rules and gridlines.
+        Legend: everything from the LEGEND heading (or the divider just above it) down."""
+        def bounds(it):
+            if it["kind"] == "edge":
+                xs, ys = [p[0] for p in it["points"]], [p[1] for p in it["points"]]
+                return min(xs), min(ys), max(xs), max(ys)
+            if it["kind"] == "text":
+                return it["cx"] - it["w"] / 2, it["cy"] - it["fs"] * 0.65, it["cx"] + it["w"] / 2, it["cy"] + it["fs"] * 0.65
+            return it["x"], it["y"], it["x"] + it["w"], it["y"] + it["h"]
+
+        def axis_aligned_bare(e):
+            return (e["kind"] == "edge" and e["style"].get("endArrow") == "none" and e["style"].get("startArrow") == "none"
+                    and all(abs(a[0] - b[0]) < 0.5 or abs(a[1] - b[1]) < 0.5 for a, b in zip(e["points"], e["points"][1:])))
+
+        def bare_rule(e):
+            return axis_aligned_bare(e) and "source" not in e and "target" not in e
+
+        def inside(it, v, pad=0.5):
+            x0, y0, x1, y1 = bounds(it)
+            return v["x"] - pad <= x0 and v["y"] - pad <= y0 and x1 <= v["x"] + v["w"] + pad and y1 <= v["y"] + v["h"] + pad
+
+        for it in self.items:
+            it["layer"] = "main"
+        heads = [bounds(t)[1] for t in self.items if t["kind"] == "text" and t["text"].upper().startswith("LEGEND")]
+        heads += [bounds(v)[1] for v in self.items if v.get("labels")
+                  and any(t["text"].upper().startswith("LEGEND") for t in v["labels"])]
+        if heads:
+            top = min(heads)
+            for e in self.items:
+                if bare_rule(e):
+                    x0, y0, x1, y1 = bounds(e)
+                    if y1 - y0 < 0.5 and x1 - x0 > self.vb[2] * 0.5 and top - 30 <= y0 <= top:
+                        top = min(top, y0 - 0.5)
+            for it in self.items:
+                if bounds(it)[1] >= top:
+                    it["layer"] = "legend"
+
+        main = [i for i, it in enumerate(self.items) if it["layer"] == "main"]
+        connected = {e[k] for e in self.items if e["kind"] == "edge" for k in ("source", "target") if k in e}
+        # 1. lanes / zones: shapes that fully contain a node something connects to
+        bg = set()
+        for idx in main:
+            v = self.items[idx]
+            if v["kind"] == "vertex" and any(
+                    j != idx and inside(self.items[j], v) and v["w"] * v["h"] > self.items[j]["w"] * self.items[j]["h"]
+                    for j in connected):
+                bg.add(idx)
+        # 2. zone title tabs: unconnected items in the top strip of a zone, not part of a node
+        nodes = [self.items[j] for j in connected if j not in bg]
+        edge_pts = [pt for e in self.items if e["kind"] == "edge" and ("source" in e or "target" in e)
+                    for a, b in zip(e["points"], e["points"][1:])
+                    for pt in [(a[0] + (b[0] - a[0]) * k / 8, a[1] + (b[1] - a[1]) * k / 8) for k in range(9)]]
+
+        def near_connector(it, tol=10.0):
+            x0, y0, x1, y1 = bounds(it)
+            return any(x0 - tol <= px <= x1 + tol and y0 - tol <= py <= y1 + tol for px, py in edge_pts)
+
+        for idx in main:
+            it = self.items[idx]
+            if idx in bg or idx in connected or it["kind"] == "edge":
+                continue
+            if any(inside(it, n, 1) for n in nodes):
+                continue
+            for z in bg:
+                zone = self.items[z]
+                if (inside(it, zone, 1) and bounds(it)[1] - zone["y"] <= 20
+                        and bounds(it)[0] - zone["x"] <= 0.25 * zone["w"] and not near_connector(it)):
+                    bg.add(idx)
+                    break
+        # 3. free text styled and aligned like a lane label (lanes drawn as page background have no shape)
+        lane_styles = {(round(t["x"]), t["fs"], t["family"], t["color"], t["anchor"])
+                       for z in bg for t in self.items[z].get("labels", [])}
+        for idx in main:
+            t = self.items[idx]
+            if t["kind"] == "text" and (round(t["x"]), t["fs"], t["family"], t["color"], t["anchor"]) in lane_styles:
+                bg.add(idx)
+        # 4. rules and gridlines: arrowless straight lines touching nothing but background
+        for idx in main:
+            e = self.items[idx]
+            if axis_aligned_bare(e) and all(e.get(k) is None or e[k] in bg for k in ("source", "target")):
+                bg.add(idx)
+        for idx in bg:
+            self.items[idx]["layer"] = "bg"
+        for name in ("bg", "legend"):
+            self.stats[f"layer_{name}"] = sum(1 for it in self.items if it["layer"] == name)
+
     def build(self, title):
         for child in self.root:
             self.walk(child, self.compute(self.root, {"_opacity": 1.0}, []), IDENTITY,
@@ -1166,8 +1267,16 @@ class Converter:
         self.drop_backing_plates()
         self.merge_labels()
         self.connect_edges()
+        self.style_connectors()
+        self.assign_layers()
         ids = {}
-        cells = ['<mxCell id="0"/>', '<mxCell id="1" parent="0"/>']
+        layer_ids = {"bg": "layer-background", "main": "1", "legend": "layer-legend"}
+        cells = ['<mxCell id="0"/>']
+        if self.stats["layer_bg"]:
+            cells.append('<mxCell id="layer-background" value="Background" style="locked=1;" parent="0"/>')
+        cells.append('<mxCell id="1" value="Diagram" parent="0"/>')
+        if self.stats["layer_legend"]:
+            cells.append('<mxCell id="layer-legend" value="Legend" parent="0"/>')
         for n, it in enumerate(self.items):
             ids[n] = f"c{n + 2}"
         vx, vy = self.vb[0], self.vb[1]
@@ -1177,7 +1286,7 @@ class Converter:
                 value = self.label(it) if it.get("labels") else ""
                 if it["kind"] == "vertex" and "whiteSpace" not in it["style"]:
                     it["style"].setdefault("html", 1)
-                cells.append(self._vertex_xml(cid, value, it["style"], it["x"] - vx, it["y"] - vy, it["w"], it["h"]))
+                cells.append(self._vertex_xml(cid, value, it["style"], it["x"] - vx, it["y"] - vy, it["w"], it["h"], layer_ids[it["layer"]]))
             elif it["kind"] == "text":
                 s = self.text_cell_style(it)
                 w, h = it["w"] + 2, it["fs"] * 1.3
@@ -1186,9 +1295,9 @@ class Converter:
                     x = it["x"]
                 elif it["anchor"] == "end" and abs(it["rot"]) < 0.01:
                     x = it["x"] - w
-                cells.append(self._vertex_xml(cid, self.span_html(it), s, x - vx, it["cy"] - h / 2 - vy, w, h))
+                cells.append(self._vertex_xml(cid, self.span_html(it), s, x - vx, it["cy"] - h / 2 - vy, w, h, layer_ids[it["layer"]]))
             else:
-                cells.append(self._edge_xml(cid, it, ids, vx, vy))
+                cells.append(self._edge_xml(cid, it, ids, vx, vy, layer_ids[it["layer"]]))
         bg = f' background="{self.background}"' if self.background else ""
         return (f'<mxfile host="diagram-design" type="device">\n'
                 f'  <diagram name={quoteattr(title or "Diagram")} id="diagram-design">\n'
@@ -1202,12 +1311,12 @@ class Converter:
     def _style_str(style):
         return "".join(f"{k};" if v is None else f"{k}={v};" for k, v in style.items())
 
-    def _vertex_xml(self, cid, value, style, x, y, w, h):
+    def _vertex_xml(self, cid, value, style, x, y, w, h, parent="1"):
         return (f'<mxCell id="{cid}" value={quoteattr(value)} style={quoteattr(self._style_str(style))} '
-                f'vertex="1" parent="1"><mxGeometry x="{fmt(round(x, 2))}" y="{fmt(round(y, 2))}" '
+                f'vertex="1" parent="{parent}"><mxGeometry x="{fmt(round(x, 2))}" y="{fmt(round(y, 2))}" '
                 f'width="{fmt(round(w, 2))}" height="{fmt(round(h, 2))}" as="geometry"/></mxCell>')
 
-    def _edge_xml(self, cid, e, ids, vx, vy):
+    def _edge_xml(self, cid, e, ids, vx, vy, parent="1"):
         attrs = ""
         if "source" in e:
             attrs += f' source="{ids[e["source"]]}"'
@@ -1215,7 +1324,7 @@ class Converter:
             attrs += f' target="{ids[e["target"]]}"'
         pts = [(x - vx, y - vy) for x, y in e["points"]]
         inner = "".join(f'<mxPoint x="{fmt(round(x, 2))}" y="{fmt(round(y, 2))}"/>' for x, y in pts[1:-1])
-        return (f'<mxCell id="{cid}" value="" style={quoteattr(self._style_str(e["style"]))} edge="1" parent="1"{attrs}>'
+        return (f'<mxCell id="{cid}" value="" style={quoteattr(self._style_str(e["style"]))} edge="1" parent="{parent}"{attrs}>'
                 f'<mxGeometry relative="1" as="geometry">'
                 f'<mxPoint x="{fmt(round(pts[0][0], 2))}" y="{fmt(round(pts[0][1], 2))}" as="sourcePoint"/>'
                 f'<mxPoint x="{fmt(round(pts[-1][0], 2))}" y="{fmt(round(pts[-1][1], 2))}" as="targetPoint"/>'
@@ -1245,6 +1354,9 @@ def main():
     print(f"  {s['shapes']} shapes, {s['stencils']} custom shapes, {s['images']} embedded images")
     print(f"  {s['edges']} connectors ({s['edges_connected']} attached to shapes)")
     print(f"  {s['texts']} text runs ({s['texts_merged']} merged into shape labels)")
+    print(f"  layers: {s['layer_bg']} background (locked), "
+          f"{s['shapes'] + s['stencils'] + s['images'] + s['edges'] + s['texts'] - s['texts_merged'] - s['layer_bg'] - s['layer_legend']} diagram, "
+          f"{s['layer_legend']} legend")
 
 
 if __name__ == "__main__":
