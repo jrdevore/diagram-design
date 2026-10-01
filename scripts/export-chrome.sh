@@ -7,6 +7,8 @@
 #   - Captures the full viewport, not just the SVG element
 #   - No transparent background support
 #   - No element-specific cropping
+#   - Can't release the template's overflow scroller, so wide presets
+#     (doc-wide, slide-16x9) lose their right edge; use the Python or Node script
 # Best for quick previews when fine control isn't needed.
 
 set -euo pipefail

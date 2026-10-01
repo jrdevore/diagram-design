@@ -52,6 +52,10 @@ async function main() {
     process.exit(1);
   }
 
+  // Release clipping ancestors so wide presets (doc-wide, slide-16x9) aren't cut off.
+  await svg.evaluate(el => {
+    for (let a = el.parentElement; a; a = a.parentElement) a.style.setProperty('overflow', 'visible', 'important');
+  });
   await svg.screenshot({ path: absoluteOut, omitBackground: true });
   console.log(`Exported: ${absoluteOut} (scale=${scale}x)`);
   await browser.close();

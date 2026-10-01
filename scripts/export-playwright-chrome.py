@@ -49,6 +49,8 @@ def main():
             browser.close()
             sys.exit(1)
 
+        # Release clipping ancestors so wide presets (doc-wide, slide-16x9) aren't cut off.
+        svg.evaluate("el => { for (let a = el.parentElement; a; a = a.parentElement) a.style.setProperty('overflow', 'visible', 'important'); }")
         svg.screenshot(path=out, omit_background=True)
         browser.close()
 
