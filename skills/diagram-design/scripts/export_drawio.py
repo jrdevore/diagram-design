@@ -512,8 +512,9 @@ def fmt(v):
 # ---------------------------------------------------------------- converter
 
 class Converter:
-    def __init__(self, source_text, layers=True, lock=True, exact_connectors=False):
+    def __init__(self, source_text, layers=True, lock=True, exact_connectors=False, editorial=True):
         self.source = source_text
+        self.include_editorial = editorial
         self.use_layers, self.lock, self.exact_connectors = layers, lock, exact_connectors
         svg_text = xml_safe(extract_svg(source_text))
         self.root = ET.fromstring(svg_text)
@@ -1303,6 +1304,11 @@ class Converter:
         for n, it in enumerate(self.items):
             ids[n] = f"c{n + 2}"
         vx, vy = self.vb[0], self.vb[1]
+        notes, header_h, page_h = [], 0.0, self.vb[3]
+        self.editorial = Editorial(self, self.source) if self.include_editorial else None
+        if self.editorial and self.editorial.present():
+            notes, header_h, page_h = self.editorial.layout(self.vb[2], self.vb[3])
+            vy -= header_h
         for n, it in enumerate(self.items):
             cid = ids[n]
             if it["kind"] in ("vertex", "image"):
@@ -1326,14 +1332,55 @@ class Converter:
                 cells.append(self._vertex_xml(cid, self.span_html(it), s, x - vx, it["cy"] - h / 2 - vy, w, h, layer_ids[it["layer"]]))
             else:
                 cells.append(self._edge_xml(cid, it, ids, vx, vy, layer_ids[it["layer"]]))
+        if notes:
+            parent = "1"
+            if self.use_layers:
+                parent = "layer-notes"
+                cells.append('<mxCell id="layer-notes" value="Notes" parent="0"/>')
+            cells += self._editorial_xml(notes, parent)
+        self.stats["notes"] = len(notes)
         bg = f' background="{self.background}"' if self.background else ""
         return (f'<mxfile host="diagram-design" type="device">\n'
                 f'  <diagram name={quoteattr(title or "Diagram")} id="diagram-design">\n'
                 f'    <mxGraphModel grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" '
-                f'fold="1" page="1" pageScale="1" pageWidth="{fmt(self.vb[2])}" pageHeight="{fmt(self.vb[3])}"'
+                f'fold="1" page="1" pageScale="1" pageWidth="{fmt(self.vb[2])}" pageHeight="{fmt(round(page_h))}"'
                 f'{bg} math="0" shadow="0">\n      <root>\n        '
                 + "\n        ".join(cells) +
                 "\n      </root>\n    </mxGraphModel>\n  </diagram>\n</mxfile>\n")
+
+    def _editorial_xml(self, notes, parent):
+        out = []
+        for n, it in enumerate(notes):
+            cid = f"n{n + 1}"
+            if it["kind"] == "text":
+                st = {"text": None, "html": 1, "strokeColor": "none", "fillColor": "none", "align": it["align"],
+                      "verticalAlign": "top", "spacing": 0, "connectable": 0, "fontSize": fmt(round(it["fs"], 2)),
+                      "fontColor": parse_paint(it["color"])[0], **self.font_style(it["family"])}
+                if it["wrap"]:
+                    st["whiteSpace"] = "wrap"
+                value = esc(it["text"])
+                if it["ls"]:
+                    value = f'<span style="letter-spacing:{fmt(round(it["ls"], 2))}px">{value}</span>'
+                out.append(self._vertex_xml(cid, value, st, it["x"], it["y"], it["w"], it["h"], parent))
+            elif it["kind"] == "card":
+                fill, fa = parse_paint(self.editorial.card_bg)
+                stroke, sa = parse_paint(self.editorial.color["rule"])
+                st = {"rounded": 1, "absoluteArcSize": 1, "arcSize": 12, "html": 1, "whiteSpace": "wrap",
+                      "fillColor": fill, "strokeColor": stroke, "strokeWidth": 1, "align": "left",
+                      "verticalAlign": "top", "spacing": fmt(round(it["pad"], 2)), "connectable": 0,
+                      **self.font_style(self.editorial.fam["sans"])}
+                if sa < 0.999:
+                    st["strokeOpacity"] = round(sa * 100)
+                out.append(self._vertex_xml(cid, it["value"], st, it["x"], it["y"], it["w"], it["h"], parent))
+            elif it["kind"] == "line":
+                stroke, sa = parse_paint(it["color"])
+                st = {"edgeStyle": "none", "html": 1, "endArrow": "none", "startArrow": "none",
+                      "strokeColor": stroke, "strokeWidth": 1, "strokeOpacity": round(sa * 100)}
+                out.append(f'<mxCell id="{cid}" value="" style={quoteattr(self._style_str(st))} edge="1" parent="{parent}">'
+                           f'<mxGeometry relative="1" as="geometry"><mxPoint x="{fmt(round(it["x0"], 2))}" '
+                           f'y="{fmt(round(it["y"], 2))}" as="sourcePoint"/><mxPoint x="{fmt(round(it["x1"], 2))}" '
+                           f'y="{fmt(round(it["y"], 2))}" as="targetPoint"/></mxGeometry></mxCell>')
+        return out
 
     @staticmethod
     def _style_str(style):
@@ -1360,6 +1407,202 @@ class Converter:
                 '</mxGeometry></mxCell>')
 
 
+# ---------------------------------------------------------------- editorial wrapper (-full templates)
+
+class _Node:
+    __slots__ = ("tag", "classes", "children", "text")
+
+    def __init__(self, tag, classes):
+        self.tag, self.classes, self.children, self.text = tag, classes, [], []
+
+    def iter(self):
+        yield self
+        for c in self.children:
+            if isinstance(c, _Node):
+                yield from c.iter()
+
+    def find(self, pred):
+        return next((n for n in self.iter() if pred(n)), None)
+
+    def all_text(self):
+        parts = []
+        for c in self.children:
+            parts.append(c if isinstance(c, str) else c.all_text())
+        return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+class _DomBuilder(__import__("html.parser").parser.HTMLParser):
+    VOID = {"br", "hr", "img", "input", "meta", "link", "source", "wbr", "area", "base", "col"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _Node("root", set())
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = _Node(tag, set((dict(attrs).get("class") or "").split()))
+        self.stack[-1].children.append(node)
+        if tag not in self.VOID:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, 0, -1):
+            if self.stack[i].tag == tag:
+                del self.stack[i:]
+                break
+
+    def handle_data(self, data):
+        if data.strip():
+            self.stack[-1].children.append(data)
+
+
+class Editorial:
+    """Rebuilds the -full template's HTML header, cards and footer as draw.io cells.
+    Layout follows template-full.html's CSS (1200px container, auto-fit 280px card columns),
+    scaled into viewBox units so it sits at the same proportion as in the browser."""
+    KNOWN = {"header", "diagram-container", "cards", "footer"}
+
+    def __init__(self, conv, source):
+        self.conv = conv
+        body = re.sub(r"<!--.*?-->|<style\b.*?</style>|<script\b.*?</script>|<head\b.*?</head>", "", source, flags=re.S | re.I)
+        svg = extract_svg(body)
+        body = body.replace(svg, "<svg-placeholder></svg-placeholder>", 1)
+        dom = _DomBuilder()
+        dom.feed(body)
+        self.root = dom.root
+        v = conv.css.vars
+
+        def var(name, default):
+            return conv.css.resolve(v.get(name, default))
+        self.color = {k: var(f"--color-{k}", d) for k, d in (
+            ("ink", "#2d3142"), ("muted", "#4f5d75"), ("soft", "#7a8399"), ("accent", "#eb6c36"),
+            ("link", "#2e5aa8"), ("rule", "rgba(45,49,66,0.12)"), ("paper", "#f5f5f5"))}
+        card_css = conv.css.matching("div", {"card"}, [])
+        self.card_bg = conv.css.resolve(card_css.get("background", card_css.get("background-color", "#ffffff")))
+        self.fam = {k: first_family(var(f"--font-{k}", d)) for k, d in (
+            ("sans", "'Geist', sans-serif"), ("mono", "'Geist Mono', monospace"), ("serif", "'Instrument Serif', serif"))}
+        self.header = self._header()
+        self.cards = self._cards()
+        self.footer = self._footer()
+        container = self.root.find(lambda n: "container" in n.classes)
+        self.skipped = 0
+        if container:
+            for c in container.children:
+                if isinstance(c, _Node) and not (c.classes & self.KNOWN) and c.tag != "svg-placeholder" and c.all_text():
+                    self.skipped += 1
+
+    def _header(self):
+        head = self.root.find(lambda n: "header" in n.classes) or self.root
+        eyebrow = head.find(lambda n: any("eyebrow" in c for c in n.classes))
+        h1 = head.find(lambda n: n.tag == "h1")
+        sub = head.find(lambda n: "subtitle" in n.classes)
+        out = {k: n.all_text() for k, n in (("eyebrow", eyebrow), ("title", h1), ("subtitle", sub)) if n}
+        return out
+
+    def _cards(self):
+        cards = []
+        for n in self.root.iter():
+            if "card" not in n.classes:
+                continue
+            title = n.find(lambda m: m.tag in ("h3", "h4", "h2", "strong"))
+            dot = n.find(lambda m: "card-dot" in m.classes)
+            tone = next(iter((dot.classes - {"card-dot"}) if dot else set()), None)
+            items = [m.all_text() for m in n.iter() if m.tag == "li"]
+            if not items:
+                items = [m.all_text() for m in n.iter() if m.tag == "p"]
+            cards.append({"title": title.all_text() if title else "", "dot": tone, "items": [i for i in items if i]})
+        return cards
+
+    def _footer(self):
+        foot = self.root.find(lambda n: "footer" in n.classes)
+        if not foot:
+            return []
+        parts = [c.all_text() if isinstance(c, _Node) else c.strip() for c in foot.children]
+        return [p for p in parts if p]
+
+    def present(self):
+        return bool(self.header or self.cards or self.footer)
+
+    # -- layout, in CSS px then scaled
+    def layout(self, diagram_w, diagram_h):
+        s = diagram_w / 1200.0
+        cells, y = [], 0.0
+        c = self.color
+        if self.header:
+            if "eyebrow" in self.header:
+                fs = 10.56
+                cells.append(self._text(self.header["eyebrow"].upper(), 0, y, 1200, fs * 1.4, fs, self.fam["mono"], c["muted"], s, ls=0.18 * fs))
+                y += fs * 1.4 + 12
+            if "title" in self.header:
+                fs = 40
+                cells.append(self._text(self.header["title"], 0, y, 1200, fs * 1.15, fs, self.fam["serif"], c["ink"], s))
+                y += fs * 1.15 + 8
+            if "subtitle" in self.header:
+                fs, width = 16, 700
+                lines = self._lines(self.header["subtitle"], fs, width)
+                h = lines * fs * 1.55
+                cells.append(self._text(self.header["subtitle"], 0, y, width, h, fs, self.fam["sans"], c["muted"], s, wrap=True))
+                y += h
+            y += 40
+        header_h = y * s
+        y = header_h / s + diagram_h / s
+        if self.cards:
+            y += 24
+            gap = 16
+            cols = max(1, min(len(self.cards), int((1200 + gap) // (280 + gap))))
+            cw = (1200 - gap * (cols - 1)) / cols
+            for r in range(0, len(self.cards), cols):
+                row = self.cards[r:r + cols]
+                heights = [self._card_height(card, cw) for card in row]
+                rh = max(heights)
+                for k, card in enumerate(row):
+                    cells.append(self._card(card, k * (cw + gap), y, cw, rh, s))
+                y += rh + gap
+            y -= gap
+        if self.footer:
+            y += 32
+            fs = 11.52
+            cells.append({"kind": "line", "x0": 0, "x1": 1200 * s, "y": y * s, "color": "rgba(45,49,66,0.10)"})
+            y += 24
+            cells.append(self._text(self.footer[0], 0, y, 600, fs * 1.4, fs, self.fam["mono"], c["soft"], s, ls=0.06 * fs))
+            if len(self.footer) > 1:
+                cells.append(self._text(self.footer[-1], 600, y, 600, fs * 1.4, fs, self.fam["mono"], c["soft"], s,
+                                        ls=0.06 * fs, align="right"))
+            y += fs * 1.4
+        return cells, header_h, y * s
+
+    def _lines(self, text, fs, width, fam="Geist"):
+        return max(1, math.ceil(text_width(text, fs, fam, 0, False) * 1.04 / width))
+
+    def _card_height(self, card, cw):
+        inner = cw - 40
+        h = 20 + 14 * 1.3 + 14 + 1 + 14
+        for item in card["items"]:
+            h += self._lines(item, 13, inner - 14) * 13 * 1.55 + 4.8
+        return h + 20
+
+    def _text(self, text, x, y, w, h, fs, fam, color, s, ls=0.0, wrap=False, align="left"):
+        return {"kind": "text", "text": text, "x": x * s, "y": y * s, "w": w * s, "h": h * s, "fs": fs * s,
+                "family": fam, "color": color, "ls": ls * s, "wrap": wrap, "align": align}
+
+    def _card(self, card, x, y, w, h, s):
+        c = self.color
+        tone = {"coral": c["accent"], "accent": c["accent"], "ink": c["ink"], "muted": c["muted"],
+                "link": c["link"], "soft": c["soft"]}.get(card["dot"])
+        px = lambda v: fmt(round(v * s, 2))
+        dot = (f'<span style="color:{parse_paint(tone)[0]};font-size:{px(12)}px">●</span>&nbsp;&nbsp;' if tone else "")
+        head = (f'<div style="font-family:\'{self.fam["sans"]}\',sans-serif;font-size:{px(14)}px;font-weight:600;'
+                f'color:{parse_paint(c["ink"])[0]};padding-bottom:{px(14)}px;margin-bottom:{px(14)}px;'
+                f'border-bottom:1px solid rgba(45,49,66,0.08)">{dot}{esc(card["title"])}</div>')
+        items = "".join(
+            f'<div style="position:relative;padding-left:{px(14)}px;margin-bottom:{px(4.8)}px;line-height:1.55;'
+            f'font-family:\'{self.fam["sans"]}\',sans-serif;font-size:{px(13)}px;color:{parse_paint(c["muted"])[0]}">'
+            f'<span style="position:absolute;left:0;color:rgba(45,49,66,0.25);font-size:{px(12)}px">—</span>'
+            f'{esc(item)}</div>' for item in card["items"])
+        return {"kind": "card", "x": x * s, "y": y * s, "w": w * s, "h": h * s, "value": head + items,
+                "pad": 20 * s}
+
+
 def drawio_compress(text):
     """draw.io's Graph.compress: encodeURIComponent → raw deflate → base64."""
     quoted = urllib.parse.quote(text, safe="-_.!~*'()")
@@ -1379,6 +1622,8 @@ def main():
                     help="put everything on one layer instead of Background / Diagram / Legend")
     ap.add_argument("--no-lock", action="store_true",
                     help="leave background lanes and zones unlocked")
+    ap.add_argument("--diagram-only", action="store_true",
+                    help="skip the editorial header, cards and footer of -full templates (diagram SVG only)")
     ap.add_argument("--exact-connectors", action="store_true",
                     help="keep connectors as fixed straight segments instead of draw.io orthogonal, rounded connectors")
     args = ap.parse_args()
@@ -1386,7 +1631,7 @@ def main():
     out = args.output or src.with_suffix(".drawio")
     text = src.read_text(encoding="utf-8")
     conv = Converter(text, layers=not args.no_layers, lock=not args.no_lock,
-                     exact_connectors=args.exact_connectors)
+                     exact_connectors=args.exact_connectors, editorial=not args.diagram_only)
     title_el = next((e for e in conv.root if local(e.tag) == "title"), None)
     title = (title_el.text or "").strip() if title_el is not None else src.stem
     out.write_text(conv.build(title), encoding="utf-8")
@@ -1402,6 +1647,12 @@ def main():
         print(f"  layers: {s['layer_bg']} background, {cells - s['layer_bg'] - s['layer_legend']} diagram, "
               f"{s['layer_legend']} legend")
     print(f"  {s['locked']} background items locked, {s['not_connectable']} decorations won't accept new connectors")
+    ed = conv.editorial
+    if ed is not None and ed.present():
+        parts = [p for p, ok in (("header", ed.header), (f"{len(ed.cards)} cards", ed.cards), ("footer", ed.footer)) if ok]
+        where = "Notes layer" if not args.no_layers else "Diagram layer"
+        print(f"  editorial: {', '.join(parts)} on the {where}"
+              + (f" ({ed.skipped} unrecognised sections skipped)" if ed.skipped else ""))
 
 
 if __name__ == "__main__":

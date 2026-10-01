@@ -49,6 +49,7 @@ Exported: my-diagram.drawio
   38 text runs (30 merged into shape labels)
   layers: 6 background, 28 diagram, 16 legend
   6 background items locked, 37 decorations won't accept new connectors
+  editorial: header, 3 cards, footer on the Notes layer
 ```
 
 | Line | Meaning |
@@ -58,11 +59,12 @@ Exported: my-diagram.drawio
 | text runs (N merged) | Pieces of text; "merged" ones became the label of the shape they sit in |
 | layers | How many items went to each layer (see [Layers](#layers)) |
 | locked / won't accept connectors | Background items you can't accidentally drag; badges, labels, icons and lanes that new arrows won't snap to |
+| editorial | The page header, cards and footer from outside the diagram (see [Editorial content](#editorial-content-header-cards-footer)). Only printed when the HTML has them. |
 
 ## Command-line options
 
 ```
-diagram-drawio INPUT [OUTPUT] [--no-layers] [--no-lock] [--exact-connectors]
+diagram-drawio INPUT [OUTPUT] [--no-layers] [--no-lock] [--diagram-only] [--exact-connectors]
 ```
 
 | Argument / option | Default | What it does |
@@ -71,6 +73,7 @@ diagram-drawio INPUT [OUTPUT] [--no-layers] [--no-lock] [--exact-connectors]
 | `OUTPUT` | `INPUT` with a `.drawio` extension, in the same folder | Where to write the draw.io file. Overwrites it if it exists. |
 | `--no-layers` | off | Puts everything on one layer instead of Background / Diagram / Legend |
 | `--no-lock` | off | Leaves background lanes and zones unlocked (the layer and each item) |
+| `--diagram-only` | off | Converts the diagram SVG only and skips the page header, cards and footer |
 | `--exact-connectors` | off | Keeps connectors as fixed straight segments. By default, right-angle connectors attached to shapes become draw.io's orthogonal, rounded connectors, which re-route when boxes move. |
 | `-h`, `--help` | | Prints the options |
 
@@ -110,8 +113,10 @@ Open the Layers panel with *View → Layers* (Cmd/Ctrl+Shift+L).
 | **Background** | Swimlanes, zones and boundaries (any shape that contains a connected node), zone title tabs, lane labels, and arrowless divider lines and gridlines | **Locked**: the layer and each item in it |
 | **Diagram** | Nodes, connectors, connector labels, icons, headings: everything else | Editable |
 | **Legend** | Everything from the `LEGEND` heading (or the divider line just above it) down | Editable; hide it with the eye icon |
+| **Notes** | The page header, cards and footer from outside the diagram | Editable; hide it with the eye icon |
 
-A layer only appears if something lands in it. A flowchart with no lanes gets no
+A layer only appears if something lands in it. A diagram with no page header or
+cards gets no Notes layer. A flowchart with no lanes gets no
 Background layer, and a diagram without a `LEGEND` heading gets no Legend layer.
 
 **To edit a lane or zone:**
@@ -129,6 +134,34 @@ The sorting is a guess based on shapes and positions:
   boxes that a connector attaches to make their surrounding shape a lane or zone.
 - **Free text counts as a lane label only if it lines up with a lane label
   already attached to a lane.** Same x position, font, size and colour.
+
+## Editorial content (header, cards, footer)
+
+Diagram HTML files carry content outside the diagram itself, written as plain
+HTML rather than SVG:
+
+- **Every template** has an eyebrow and a title above the diagram.
+- **The full editorial templates (`-full`)** also add a subtitle, a row of
+  explanation cards under the legend, and a footer.
+
+By default the export rebuilds these on the Notes layer:
+
+| In the HTML | In draw.io |
+|---|---|
+| Eyebrow, title, subtitle | Text above the diagram (the diagram moves down to make room) |
+| Each card | One white rounded box: coloured dot, bold title, divider, then the list items with "—" markers. Double-click it to edit the text. |
+| Footer | A divider line, with the left and right footer text below it |
+
+Things to know:
+
+- **Card layout is calculated, not measured.** Cards sit in equal columns under
+  the diagram, following the template's CSS (a 1200px page, columns at least
+  280px wide, 16px gaps), and are sized from their text. Spacing is close to the
+  browser's but not pixel-exact.
+- **Only the template's standard sections are recognised:** `.header`,
+  `.card` (title from `h3`, items from `li` or `p`) and `.footer`. Anything else
+  is skipped, and the summary line reports how many sections were skipped.
+- **Use `--diagram-only`** when you only want the diagram.
 
 ## Connections
 

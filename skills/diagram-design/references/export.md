@@ -199,7 +199,7 @@ The user asks for a draw.io, diagrams.net, `.drawio` or "editable" version of a 
 1. Confirm the source is a single diagram file (same edge cases as above: not `assets/index.html`, and it contains an `<svg>`).
 2. Run from this skill directory:
    ```
-   python3 scripts/export_drawio.py <diagram.html> [out.drawio] [--no-layers] [--no-lock] [--exact-connectors]
+   python3 scripts/export_drawio.py <diagram.html> [out.drawio] [--no-layers] [--no-lock] [--diagram-only] [--exact-connectors]
    ```
    Default output is `<basename>.drawio` next to the source. A standalone `.svg` works as input too.
 3. Relay the summary lines it prints: shape, connector, label and layer counts.
@@ -210,10 +210,12 @@ The user asks for a draw.io, diagrams.net, `.drawio` or "editable" version of a 
 | *(none)* | Background / Diagram / Legend layers; Background locked; right-angle connectors attached to shapes become orthogonal, rounded draw.io connectors |
 | `--no-layers` | Everything on one layer |
 | `--no-lock` | Background lanes and zones left unlocked |
+| `--diagram-only` | Skip the HTML header, cards and footer; convert the SVG only |
 | `--exact-connectors` | Connectors keep fixed straight segments (no orthogonal routing or added rounding) |
 
 ### What to tell the user
 
+- **Also converts the page wrapper:** the header (eyebrow, title, subtitle), `-full` template cards and the footer become editable text and boxes on a Notes layer. Cards are laid out from the template's CSS, not measured.
 - **Converts to native draw.io:** shapes, labels (merged into their shapes), and connectors attached to their boxes. Arrowheads, dashes, rounded corners and line hops are kept.
 - **Embedded as images:** icons (nested SVGs, `<use>`, `<image>`, `<foreignObject>`). They can be moved, not edited.
 - **Containers don't group their contents.** Moving a lane leaves the boxes inside it behind.
