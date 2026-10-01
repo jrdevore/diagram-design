@@ -121,7 +121,10 @@ src, out = sys.argv[1], sys.argv[2]
 scale = int(sys.argv[3]) if len(sys.argv) > 3 else 2
 
 with sync_playwright() as p:
-    browser = p.chromium.launch()
+    try:
+        browser = p.chromium.launch()
+    except Exception:
+        browser = p.chromium.launch(channel="chrome")
     page = browser.new_page(device_scale_factor=scale)
     page.goto(f"file://{pathlib.Path(src).resolve()}")
     page.wait_for_load_state("networkidle")
@@ -132,6 +135,8 @@ with sync_playwright() as p:
     svg.screenshot(path=out, omit_background=True)
     browser.close()
 ```
+
+The `try`/`except` fallback uses the system-installed Google Chrome (`channel="chrome"`) when the Playwright-managed Chromium binary is not available (e.g. behind a corporate proxy that blocks the download).
 
 Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets or `3` for print/retina hero use, passed as a third CLI arg.
 
