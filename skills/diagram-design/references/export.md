@@ -185,3 +185,47 @@ If the target aspect ratio doesn't match the `viewBox` aspect ratio, say so and 
 - Adds export buttons or `<script>` tags. Static diagrams remain script-free; an already motion-enabled source may retain the scoped controller from [`animation.md`](animation.md), but export never injects another controller.
 - Auto-emits `.svg` or `.png` alongside HTML generation. Manual on every call.
 - Embeds an HTML wrapper (cards, headers) into the SVG via `foreignObject`. Too fragile across renderers.
+
+## draw.io export
+
+Produces an editable `.drawio` file (draw.io / diagrams.net) from a diagram HTML. It's separate from the SVG/PNG procedure above: it needs no browser and no Playwright, only Python 3.10+.
+
+### Trigger
+
+The user asks for a draw.io, diagrams.net, `.drawio` or "editable" version of a diagram, for example "export this to draw.io" or "I want to edit this in diagrams.net". Manual only: never write a `.drawio` file unprompted.
+
+### Procedure
+
+1. Confirm the source is a single diagram file (same edge cases as above: not `assets/index.html`, and it contains an `<svg>`).
+2. Run from this skill directory:
+   ```
+   python3 scripts/export_drawio.py <diagram.html> [out.drawio] [--no-layers] [--no-lock] [--exact-connectors]
+   ```
+   Default output is `<basename>.drawio` next to the source. A standalone `.svg` works as input too.
+3. Relay the summary lines it prints: shape, connector, label and layer counts.
+4. Don't hand-write or patch mxGraph XML. If the script fails, report the error. As a fallback, run the SVG export (`scripts/export_svg.py`) and convert that `.svg` instead.
+
+| Flag | Effect |
+|---|---|
+| *(none)* | Background / Diagram / Legend layers; Background locked; right-angle connectors attached to shapes become orthogonal, rounded draw.io connectors |
+| `--no-layers` | Everything on one layer |
+| `--no-lock` | Background lanes and zones left unlocked |
+| `--exact-connectors` | Connectors keep fixed straight segments (no orthogonal routing or added rounding) |
+
+### What to tell the user
+
+- **Converts to native draw.io:** shapes, labels (merged into their shapes), and connectors attached to their boxes. Arrowheads, dashes, rounded corners and line hops are kept.
+- **Embedded as images:** icons (nested SVGs, `<use>`, `<image>`, `<foreignObject>`). They can be moved, not edited.
+- **Containers don't group their contents.** Moving a lane leaves the boxes inside it behind.
+- **Text can be off by a pixel or two.**
+- **Fonts load from Google Fonts**, so draw.io needs internet access to show them.
+- **One-way only.** Re-exporting overwrites any edits made in draw.io. To bring a hand-edited `.drawio` back into the skill's style, use the draw.io import (`/diagram-design:import-drawio`).
+
+### Matching draw.io's own defaults
+
+`scripts/drawio_kit.py [--dark] [--out DIR]` writes two files:
+
+- **`drawio-config.json`**, for draw.io's *Extras → Configuration* (paste, apply, restart). It sets default shape and connector styles, brand colour swatches and fonts.
+- **`diagram-design-library.xml`**, for *File → Open Library from → Device*. It holds 16 ready-styled shapes and connectors.
+
+Colours are read from `style-guide.md`, so an onboarded brand palette carries over. Offer this when the user plans to keep editing in draw.io.

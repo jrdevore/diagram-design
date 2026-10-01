@@ -387,3 +387,7 @@ Every diagram is an accessible figure by default (long form: [primitives-core.md
 When the user asks to export, save, rasterize, or convert a generated diagram to `.png` or `.svg`, load [`references/export.md`](references/export.md) and follow the procedure there. For the SVG half, prefer the packaged helper `scripts/export_svg.py` (it carries class-based CSS into the fragment and namespaces `<defs>` IDs so exports stay inline-safe). Both formats deliver the diagram only (the `<svg>` node) — editorial wrappers like cards and headers are dropped by design. Export is **manual** — never produce export files unprompted.
 
 For an imported diagram, pixel dimensions come from the `viewBox` × scale factor, so its size decision belongs to §11, not to export. For any diagram that needs an exact frame (an OG card or a slide image), see [`export.md` § Sizing the export](references/export.md).
+
+### Exporting to draw.io
+
+When the user wants an editable draw.io / diagrams.net file (`.drawio`), run `python3 scripts/export_drawio.py <diagram.html> [out.drawio]` from this skill directory. Don't hand-write mxGraph XML. It converts nodes, labels and connectors into native draw.io cells on Background / Diagram / Legend layers. Report its summary lines to the user. For options, caveats and the matching draw.io style kit (`scripts/drawio_kit.py`), see [`export.md` § draw.io export](references/export.md). Manual only, like every other export.

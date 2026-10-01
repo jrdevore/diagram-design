@@ -1,0 +1,84 @@
+{
+  "defaultVertexStyle": {
+    "html": "1",
+    "whiteSpace": "wrap",
+    "rounded": "1",
+    "absoluteArcSize": "1",
+    "arcSize": "12",
+    "fillColor": "#393e53",
+    "strokeColor": "#f5f5f5",
+    "strokeWidth": "1",
+    "fontFamily": "Geist",
+    "fontSource": "https%3A%2F%2Ffonts.googleapis.com%2Fcss2%3Ffamily%3DGeist%3Awght%40400%3B500%3B600%26display%3Dswap",
+    "fontSize": "12",
+    "fontColor": "#f5f5f5",
+    "fontStyle": "0"
+  },
+  "defaultEdgeStyle": {
+    "edgeStyle": "orthogonalEdgeStyle",
+    "rounded": "1",
+    "arcSize": "16",
+    "html": "1",
+    "startArrow": "none",
+    "endArrow": "block",
+    "endFill": "1",
+    "endSize": "5",
+    "jumpStyle": "arc",
+    "jumpSize": "16",
+    "fontFamily": "Geist Mono",
+    "fontSource": "https%3A%2F%2Ffonts.googleapis.com%2Fcss2%3Ffamily%3DGeist%2BMono%3Awght%40400%3B500%3B600%26display%3Dswap",
+    "fontSize": "8",
+    "fontColor": "#bfc0c0",
+    "fontStyle": "0",
+    "strokeColor": "#bfc0c0",
+    "strokeWidth": "1.2"
+  },
+  "customPresetColors": [
+    "F5F5F5",
+    "BFC0C0",
+    "8E98AC",
+    "F08A59",
+    "6A95D8",
+    "2D3142",
+    "393E53",
+    "7C8F6F",
+    "5E7A9B",
+    "B8915A",
+    "9C6B50",
+    "6E6479"
+  ],
+  "customFonts": [
+    {
+      "fontFamily": "Geist",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+    },
+    {
+      "fontFamily": "Geist Mono",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap"
+    },
+    {
+      "fontFamily": "Instrument Serif",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap"
+    },
+    {
+      "fontFamily": "Noto Serif",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Noto+Serif:ital@0;1&display=swap"
+    },
+    {
+      "fontFamily": "Noto Sans KR",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&display=swap"
+    },
+    {
+      "fontFamily": "Noto Serif KR",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400&display=swap"
+    },
+    {
+      "fontFamily": "Noto Sans TC",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600&display=swap"
+    },
+    {
+      "fontFamily": "Noto Serif TC",
+      "fontUrl": "https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400&display=swap"
+    }
+  ]
+}

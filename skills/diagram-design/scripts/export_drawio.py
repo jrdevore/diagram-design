@@ -2,7 +2,7 @@
 """Convert a diagram-design HTML (or standalone SVG) into an editable draw.io file.
 
 Usage:
-    python export-drawio.py <input.html|input.svg> [output.drawio]
+    python export_drawio.py <input.html|input.svg> [output.drawio]
 
 Rects, circles, diamonds and text become native draw.io shapes; text sitting
 inside a shape becomes that shape's label. Lines and open paths become
@@ -512,8 +512,9 @@ def fmt(v):
 # ---------------------------------------------------------------- converter
 
 class Converter:
-    def __init__(self, source_text):
+    def __init__(self, source_text, layers=True, lock=True, exact_connectors=False):
         self.source = source_text
+        self.use_layers, self.lock, self.exact_connectors = layers, lock, exact_connectors
         svg_text = xml_safe(extract_svg(source_text))
         self.root = ET.fromstring(svg_text)
         svg_classes = set(" ".join(re.findall(r'\sclass="([^"]*)"', svg_text)).split())
@@ -1025,6 +1026,8 @@ class Converter:
             pts = e["points"]
             if not all(abs(a[0] - b[0]) < 0.5 or abs(a[1] - b[1]) < 0.5 for a, b in zip(pts, pts[1:])):
                 continue
+            if self.exact_connectors:
+                continue
             e["style"]["rounded"] = 1
             e["style"].setdefault("arcSize", 16)
             if "source" in e or "target" in e:
@@ -1260,6 +1263,23 @@ class Converter:
         for name in ("bg", "legend"):
             self.stats[f"layer_{name}"] = sum(1 for it in self.items if it["layer"] == name)
 
+        # Only real nodes accept new connections: badges, chips, icons, text, lanes and legend swatches don't.
+        node_boxes = [self.items[j] for j in connected if self.items[j]["layer"] == "main"]
+        self.stats["locked"] = self.stats["not_connectable"] = 0
+        for idx, it in enumerate(self.items):
+            if it["layer"] == "bg" and self.lock:
+                it.setdefault("style", {})["locked"] = 1
+                self.stats["locked"] += 1
+            if it["kind"] == "edge":
+                continue
+            decoration = (
+                it["layer"] != "main" or it["kind"] in ("text", "image")
+                or (idx not in connected and (any(n is not it and inside(it, n, 1) for n in node_boxes)
+                                              or near_connector(it))))
+            if decoration:
+                it["connectable"] = False
+                self.stats["not_connectable"] += 1
+
     def build(self, title):
         for child in self.root:
             self.walk(child, self.compute(self.root, {"_opacity": 1.0}, []), IDENTITY,
@@ -1272,10 +1292,13 @@ class Converter:
         ids = {}
         layer_ids = {"bg": "layer-background", "main": "1", "legend": "layer-legend"}
         cells = ['<mxCell id="0"/>']
-        if self.stats["layer_bg"]:
-            cells.append('<mxCell id="layer-background" value="Background" style="locked=1;" parent="0"/>')
+        if not self.use_layers:
+            layer_ids = {"bg": "1", "main": "1", "legend": "1"}
+        elif self.stats["layer_bg"]:
+            lock = ' style="locked=1;"' if self.lock else ""
+            cells.append(f'<mxCell id="layer-background" value="Background"{lock} parent="0"/>')
         cells.append('<mxCell id="1" value="Diagram" parent="0"/>')
-        if self.stats["layer_legend"]:
+        if self.use_layers and self.stats["layer_legend"]:
             cells.append('<mxCell id="layer-legend" value="Legend" parent="0"/>')
         for n, it in enumerate(self.items):
             ids[n] = f"c{n + 2}"
@@ -1286,9 +1309,14 @@ class Converter:
                 value = self.label(it) if it.get("labels") else ""
                 if it["kind"] == "vertex" and "whiteSpace" not in it["style"]:
                     it["style"].setdefault("html", 1)
+                if it.get("connectable") is False:
+                    it["style"]["connectable"] = 0
                 cells.append(self._vertex_xml(cid, value, it["style"], it["x"] - vx, it["y"] - vy, it["w"], it["h"], layer_ids[it["layer"]]))
             elif it["kind"] == "text":
                 s = self.text_cell_style(it)
+                s["connectable"] = 0
+                if it["layer"] == "bg" and self.lock:
+                    s["locked"] = 1
                 w, h = it["w"] + 2, it["fs"] * 1.3
                 x = it["cx"] - w / 2
                 if it["anchor"] == "start" and abs(it["rot"]) < 0.01:
@@ -1340,23 +1368,40 @@ def drawio_compress(text):
 
 
 def main():
-    if len(sys.argv) < 2:
-        sys.exit("Usage: python export-drawio.py <input.html|input.svg> [output.drawio]")
-    src = Path(sys.argv[1])
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else src.with_suffix(".drawio")
+    import argparse
+    ap = argparse.ArgumentParser(
+        prog="export_drawio.py",
+        description="Convert a diagram-design HTML or SVG file into an editable draw.io (.drawio) file.")
+    ap.add_argument("input", type=Path, help="diagram-design .html file, or a standalone .svg")
+    ap.add_argument("output", type=Path, nargs="?",
+                    help="where to write the .drawio file (default: next to the input, same name)")
+    ap.add_argument("--no-layers", action="store_true",
+                    help="put everything on one layer instead of Background / Diagram / Legend")
+    ap.add_argument("--no-lock", action="store_true",
+                    help="leave background lanes and zones unlocked")
+    ap.add_argument("--exact-connectors", action="store_true",
+                    help="keep connectors as fixed straight segments instead of draw.io orthogonal, rounded connectors")
+    args = ap.parse_args()
+    src = args.input
+    out = args.output or src.with_suffix(".drawio")
     text = src.read_text(encoding="utf-8")
-    conv = Converter(text)
+    conv = Converter(text, layers=not args.no_layers, lock=not args.no_lock,
+                     exact_connectors=args.exact_connectors)
     title_el = next((e for e in conv.root if local(e.tag) == "title"), None)
     title = (title_el.text or "").strip() if title_el is not None else src.stem
     out.write_text(conv.build(title), encoding="utf-8")
     s = conv.stats
+    cells = s["shapes"] + s["stencils"] + s["images"] + s["edges"] + s["texts"] - s["texts_merged"]
     print(f"Exported: {out}")
     print(f"  {s['shapes']} shapes, {s['stencils']} custom shapes, {s['images']} embedded images")
     print(f"  {s['edges']} connectors ({s['edges_connected']} attached to shapes)")
     print(f"  {s['texts']} text runs ({s['texts_merged']} merged into shape labels)")
-    print(f"  layers: {s['layer_bg']} background (locked), "
-          f"{s['shapes'] + s['stencils'] + s['images'] + s['edges'] + s['texts'] - s['texts_merged'] - s['layer_bg'] - s['layer_legend']} diagram, "
-          f"{s['layer_legend']} legend")
+    if args.no_layers:
+        print(f"  layers: none ({cells} items on one layer)")
+    else:
+        print(f"  layers: {s['layer_bg']} background, {cells - s['layer_bg'] - s['layer_legend']} diagram, "
+              f"{s['layer_legend']} legend")
+    print(f"  {s['locked']} background items locked, {s['not_connectable']} decorations won't accept new connectors")
 
 
 if __name__ == "__main__":
