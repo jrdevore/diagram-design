@@ -668,6 +668,49 @@ CUSTOMER ||--o{ ORDER : places
     ok("Markdown selection plus sequence, state, and ER grammars parse")
 
 
+def check_selection_before_parse(tmp: Path) -> None:
+    """A malformed block fails only when it is selected (#209)."""
+    bad_first = tmp / "bad-first-block.md"
+    bad_first.write_text(
+        "# doc\n\n```mermaid\nflowchart LR\nA -->\n```\n\n"
+        "```mermaid\nflowchart LR\nC --> D\n```\n",
+        encoding="utf-8",
+    )
+    payload = json.loads(run_extract([str(bad_first), "--diagram", "1", "--json"]))
+    if payload["diagrams_total"] != 2:
+        fail(f"diagrams_total must count every block: {payload['diagrams_total']}")
+    if [(item["index"], item["kind"]) for item in payload["diagrams"]] != [
+        (1, "flowchart")
+    ]:
+        fail("--diagram 1 did not return block 1 past a malformed block 0")
+    digest = run_extract([str(bad_first), "--diagram", "1"])
+    for needle in (
+        "2 diagram(s): [0] unparsed: malformed edge at line 5, [1] flowchart (2n/1e)",
+        "## Diagram 1",
+    ):
+        if needle not in digest:
+            fail(f"selected-block digest missing {needle!r}: {digest!r}")
+    if "## Diagram 0" in digest:
+        fail("an unselected malformed block was emitted as a diagram")
+    for selector in ([], ["--diagram", "0"], ["--diagram", "all"]):
+        expect_error([str(bad_first), *selector], "malformed edge at line 5")
+    expect_error([str(bad_first), "--diagram", "9"], "no diagram with index 9 (have 0..1)")
+
+    bad_second = tmp / "bad-second-block.md"
+    bad_second.write_text(
+        "```mermaid\nflowchart LR\nA --> B\n```\n\n"
+        "```mermaid\npie title Pets\n```\n",
+        encoding="utf-8",
+    )
+    default_digest = run_extract([str(bad_second)])
+    if "[1] unparsed: unsupported diagram kind" not in default_digest:
+        fail(f"default selection did not list the unparsed block 1: {default_digest!r}")
+    if "## Diagram 0" not in default_digest:
+        fail("default selection did not emit diagram 0 past a bad block 1")
+    expect_error([str(bad_second), "--diagram", "1"], "unsupported diagram kind: `pie`")
+    ok("--diagram selects a block before parsing it; selected bad blocks still fail")
+
+
 def check_adversarial(tmp: Path) -> None:
     payload = json.loads(run_extract([str(ADVERSARIAL), "--json"]))
     diagram = payload["diagrams"][0]
@@ -996,6 +1039,7 @@ def main() -> int:
         check_shape_and_edge_vocabulary(tmp)
         check_frontmatter(tmp)
         check_markdown_and_grammars(tmp)
+        check_selection_before_parse(tmp)
         check_legacy_stdout_encoding(tmp)
         check_sequence_grammar_forms(tmp)
         check_adversarial(tmp)

@@ -25,6 +25,15 @@
       "thumb_sha256": "e6ee9e1037d1441042c7978e796d6404cb99da4561841c169ba41f8b4e810982"
     },
     {
+      "thumb": "axonometric-plan.webp",
+      "source": "docs/screenshots/axonometric-plan.png",
+      "source_sha256": "eeeaa6d8f100b50854f1d452b253807c2ad4abc9b450bce854c04fdb95fbb7b1",
+      "width": 600,
+      "height": 270,
+      "quality": 82,
+      "thumb_sha256": "44ce05b9aa51e730f54fc5dc128caa55c2eea73cedc8876129169e2fa3378529"
+    },
+    {
       "thumb": "bar.webp",
       "source": "docs/screenshots/bar.png",
       "source_sha256": "80b5373404a6fc2d8163edee06a6b37a5737364968be0d3b010c0e7103355173",
@@ -95,6 +104,15 @@
       "height": 288,
       "quality": 82,
       "thumb_sha256": "cf2a816b86ca379f13ac1cb9de1bc1619eee598237e81a582d8dff239f24c822"
+    },
+    {
+      "thumb": "exploded.webp",
+      "source": "docs/screenshots/exploded.png",
+      "source_sha256": "e835ddfc5e9bf34191e410fe2d7020ed9340b34535647964abdba82ff68baa9c",
+      "width": 600,
+      "height": 334,
+      "quality": 82,
+      "thumb_sha256": "2dd0e991d4dce224b16effe9197dd597aab8b8847d09dbaf654d63751f6dd85b"
     },
     {
       "thumb": "fishbone.webp",

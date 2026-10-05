@@ -8,7 +8,7 @@ Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first. All contributions ar
 
 ## What this project is
 
-Diagram Design is an agent skill (Claude Code, Codex, Factory Droid, Pi) that produces editorial-quality diagrams as self-contained HTML files. The repo is documentation-first: `skills/diagram-design/SKILL.md` is the index, each of the 42 visual types has its own reference file, and the extractor scripts in `skills/diagram-design/scripts/` turn draw.io, Mermaid, and Excalidraw sources into a structured IR.
+Diagram Design is an agent skill (Claude Code, Codex, Factory Droid, Pi) that produces editorial-quality diagrams as self-contained HTML files. The repo is documentation-first: `skills/diagram-design/SKILL.md` is the index, each of the 44 visual types has its own reference file, and the extractor scripts in `skills/diagram-design/scripts/` turn draw.io, Mermaid, and Excalidraw sources into a structured IR.
 
 See [README.md](README.md) for the full picture, including the design system and the import/export flows.
 
@@ -56,6 +56,7 @@ Every validation gate below must pass before a PR is ready. They also run automa
 | Every shipped motion template/example | `python3 scripts/verify-motion.py --shipped` |
 | Docs/routing sync (description hooks, gallery, README tree, reference links and style-guide anchors, strict-bundler support paths, command/prompt surfaces, font-link parity, template title fallback order, SKILL.md split routing) | `python3 scripts/verify-docs-sync.py && python3 scripts/test-verify-docs-sync.py` |
 | Canonical README screenshots match their example HTML sources and recorded PNG digests | `python3 scripts/verify-screenshot-freshness.py` |
+| Export snippet's stalled-webfont fallback (window.stop on timeout, warning, normal load) | `python3 scripts/test-export-wait.py` (requires Playwright; skips without it) |
 | Screenshot freshness checker behaves (CRLF checkout, real source drift, raw PNG digests) | `python3 scripts/test-verify-screenshot-freshness.py` |
 | README WebP previews match their PNGs, manifest, dimensions, and full-size links | `python3 scripts/test-build-readme-thumbs.py && python3 scripts/build-readme-thumbs.py --check` (requires `Pillow==12.1.1`) |
 | Packaged output self-check behaves (pass + adversarial cases) | `python3 scripts/test-self-check.py` |
@@ -64,6 +65,12 @@ Every validation gate below must pass before a PR is ready. They also run automa
 | Label geometry checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-geometry.py` |
 | Architecture delta snapshots preserve identity, ledger coverage, signatures, positions, and relationship endpoints | `python3 scripts/verify-architecture-delta.py --all` |
 | Architecture delta checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-architecture-delta.py` |
+| Exploded examples are what the builder produces | `python3 scripts/build-exploded-examples.py --check` |
+| Exploded axonometric silhouettes match their declared boxes, gaps are equal, and labels sit in one clear column | `python3 scripts/verify-exploded.py --all` |
+| Exploded axonometric checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-exploded.py` |
+| Axonometric plan examples are what the builder produces | `python3 scripts/build-axonometric-plan-examples.py --check` |
+| Axonometric plan boxes match their declared footprints, paint back to front, never overlap, and carry one clear tag each | `python3 scripts/verify-axonometric-plan.py --all` |
+| Axonometric plan checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-axonometric-plan.py` |
 | Traceable block decomposition registries have unique IDs, resolving parents, names, and no cycles | `python3 scripts/verify-block-registry.py --all` |
 | Block registry checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-block-registry.py` |
 | Treemap cells match the values they are labelled with, and labels fit | `python3 scripts/verify-treemap.py --all` |
@@ -148,6 +155,12 @@ python3 scripts/test-plugin-package.py \
   && python3 scripts/test-verify-geometry.py \
   && python3 scripts/verify-architecture-delta.py --all \
   && python3 scripts/test-verify-architecture-delta.py \
+  && python3 scripts/build-exploded-examples.py --check \
+  && python3 scripts/verify-exploded.py --all \
+  && python3 scripts/test-verify-exploded.py \
+  && python3 scripts/build-axonometric-plan-examples.py --check \
+  && python3 scripts/verify-axonometric-plan.py --all \
+  && python3 scripts/test-verify-axonometric-plan.py \
   && python3 scripts/verify-block-registry.py --all \
   && python3 scripts/test-verify-block-registry.py \
   && python3 scripts/verify-treemap.py --all \
@@ -173,7 +186,8 @@ python3 scripts/test-plugin-package.py \
   && python3 scripts/verify-beeswarm.py --all \
   && python3 scripts/test-verify-beeswarm.py \
   && python3 scripts/verify-skin-polarity.py --all \
-  && python3 scripts/test-verify-skin-polarity.py
+  && python3 scripts/test-verify-skin-polarity.py \
+  && python3 scripts/test-export-wait.py
 ```
 
 ### If a gate fails
@@ -181,7 +195,7 @@ python3 scripts/test-plugin-package.py \
 - **`verify-plugin-package.py`:** if it reports a version change, drop the manifest edits from your branch — versions are bumped on `main` after merge, never in a PR. If packaging validation fails, keep all native marketplaces pointed at the repository root and keep the shared skill at `skills/diagram-design/SKILL.md`.
 - **`lint-skin.py`:** the failure message names the file, line, and category (`color`, `font-family`, `a11y`, `external-asset`, `pure-black`, `script`). Colors must come from the palette in `skills/diagram-design/references/style-guide.md`; fonts from the allowed list; diagrams must satisfy the accessible SVG contract (see below). The linter also requires the SHA-pinned controller from `template-motion.html` verbatim and rejects remote resources, CSS `@import`, non-fragment CSS `url()`, event handlers, `srcdoc`, executable URLs, and extra scripts.
 - **`verify-*.py`:** the extractor's real behavior no longer matches its fixture or the documentation, or the reference/command/prompt wiring drifted. Fix the source of truth — do not widen a test to avoid a failure.
-- **`verify-screenshot-freshness.py`:** a canonical minimal-light example or its committed PNG changed without a synchronized catalog refresh. Before the first regeneration, install the renderer with `python3 -m pip install playwright && python3 -m playwright install chromium`. Then run `python3 scripts/render-canonical-screenshots.py`, inspect all 42 renders, and commit the updated PNGs plus `docs/screenshots/manifest.json`. The gate hashes example sources in their canonical LF form, so a checkout that converts LF to CRLF still passes; `scripts/test-verify-screenshot-freshness.py` covers that case, real source drift, and raw PNG digests.
+- **`verify-screenshot-freshness.py`:** a canonical minimal-light example or its committed PNG changed without a synchronized catalog refresh. Before the first regeneration, install the renderer with `python3 -m pip install playwright && python3 -m playwright install chromium`. Then run `python3 scripts/render-canonical-screenshots.py`, inspect all 44 renders, and commit the updated PNGs plus `docs/screenshots/manifest.json`. The gate hashes example sources in their canonical LF form, so a checkout that converts LF to CRLF still passes; `scripts/test-verify-screenshot-freshness.py` covers that case, real source drift, and raw PNG digests.
 - **`build-readme-thumbs.py --check`:** a README preview is missing, stale, corrupt, the wrong size, orphaned, or no longer links to its full PNG. Install the pinned renderer with `python3 -m pip install Pillow==12.1.1`, run `python3 scripts/build-readme-thumbs.py`, inspect the preview changes, and commit the WebPs plus `docs/screenshots/thumbs/manifest.json`.
 - **`verify-marimekko.py`:** a column is drawn off its category's share of the width, a segment off its series' share of the column, the columns do not share one plot height or one gutter, segments leave a gap or overlap, a series changes order between columns, a second segment wears the accent, anything positions a segment or a bound label from a `transform` attribute, an inline `style`, or a `<style>` rule, or a label, caption or key disagrees with the rect it binds. Fix the geometry or the declaration so they state one thing — never widen a column or pad a segment to fit a label, and never drop a category or a series to tidy the grid.
 - **`verify-slopegraph.py`:** the two axes disagree about scale or origin, or an endpoint is drawn somewhere other than where its own declared value belongs. Fix the coordinate, never the label — and never move a point to stop two endpoint labels colliding, because crowded labels mean the values really are close.
@@ -193,6 +207,8 @@ python3 scripts/test-plugin-package.py \
 - **`verify-skin-polarity.py`:** a legend key or caption names the ramp's direction by lightness (`darker is larger`) in a file whose ramp composites the other way. `ink` is a role, not a colour — it resolves near-black on light paper and near-white on dark — so one set of opacities runs darker as it strengthens in the light skin and lighter in the dark one. Name the direction by contrast against the paper (`stronger contrast is larger`), which survives the skin swap, and ship the same sentence in every variant; never invert the word for one file. The gate also fails closed on a claim it cannot substantiate — no resolvable paper colour, fewer than three rank-bearing ramp members, or a ramp that is not strictly ordered — and on wording it cannot parse: a tone word within six words of a magnitude word that no supported sentence form binds. Rephrase that as `<tone> <is|means|represents> <magnitude>` (`stronger contrast is larger`), because a claim the gate cannot read is a claim nothing checks.
 - **`verify-geometry.py`:** a label mask overlaps a node declared later in the document, so the node fill clips the label at render time. Move the label to a free segment of its connector — keep the 6–10px gap from the stroke required by SKILL.md §6, and do not shrink the mask to sneak under the check.
 - **`verify-architecture-delta.py`:** a stable ID, snapshot membership, status, signature, position, endpoint, or ledger target disagrees with the declared migration. Follow `type-architecture-delta.md`: record every changed object in the center ledger, retain unchanged positions on matching grids, and distinguish CHANGED, MOVED, and REWIRED by what actually differs. Fix the diagram and metadata together; never suppress the ledger entry to hide an unaccounted change.
+- **`verify-exploded.py`:** a part's silhouette is off the projection of the box it declares, a level sits at two heights, the gaps differ or fall under max(0.5 x top-face height, 3 x part thickness), a leader bends, starts off its part, or crosses another part, labels crowd or leave the column, or an animated lift disagrees with the geometry. Change the model in `scripts/build-exploded-examples.py` and rebuild; never nudge a drawn coordinate, and never shrink a gap to fit the canvas.
+- **`verify-axonometric-plan.py`:** a box's silhouette is off the projection of its declared footprint, a box stands outside the plate, floats above it, or shares floor with another, a box is painted after one in front of it, or a tag is off its plan point, stands on a room or roof it does not name, overlaps another tag, runs past two words, or is missing or doubled for a room or building. Change the plan in `scripts/build-axonometric-plan-examples.py` and rebuild; move a tag to open floor rather than shrinking it.
 - **`verify-block-registry.py`:** a Traceable block decomposition diagram (`semantic-patterns.md` § 8) has a duplicate `data-block-id`, a `data-block-parent` that doesn't resolve to another block's id in the same file, a blank `data-block-id`, a missing or blank `data-block-name`, or a cycle in the parent chain. Fix the diagram's attributes — the checker mirrors the source rather than validating semantics, so a passing file is only as correct as the IDs and parents actually authored on it.
 - **Icon assets:** you changed `scripts/vendor/icons/` or `scripts/build-icons.py` and the generated files went stale. Rerun `python3 scripts/build-icons.py` and commit the regenerated files.
 

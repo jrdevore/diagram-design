@@ -114,7 +114,7 @@ Don't auto-install. The user asked for one feature, not a system change.
 Write the snippet below to a temp file and run it with `python <tmp.py> <src.html> <out.png>`:
 
 ```python
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, sync_playwright
 import sys, pathlib
 
 src, out = sys.argv[1], sys.argv[2]
@@ -123,11 +123,18 @@ scale = int(sys.argv[3]) if len(sys.argv) > 3 else 2
 with sync_playwright() as p:
     try:
         browser = p.chromium.launch()
-    except Exception:
+    except PlaywrightError:
         browser = p.chromium.launch(channel="chrome")
     page = browser.new_page(device_scale_factor=scale)
-    page.goto(f"file://{pathlib.Path(src).resolve()}")
-    page.wait_for_load_state("networkidle")
+    page.goto(f"file://{pathlib.Path(src).resolve()}", wait_until="domcontentloaded")
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except PlaywrightTimeoutError:
+        # proxied networks may stall webfont subrequests past any deadline;
+        # cancel the outstanding load so the capture below can't block on it again
+        page.evaluate("window.stop()")
+        page.wait_for_timeout(4000)
+        print("warning: webfont request stalled - captured with fallback typography; the PNG may not match the intended fonts", file=sys.stderr)
     svg = page.locator("svg").first
     # Release every clipping ancestor (local scroller, overflow:hidden chrome)
     # so an SVG wider than its frame is captured whole.
@@ -137,6 +144,8 @@ with sync_playwright() as p:
 ```
 
 The `try`/`except` fallback uses the system-installed Google Chrome (`channel="chrome"`) when the Playwright-managed Chromium binary is not available (e.g. behind a corporate proxy that blocks the download).
+
+If the `networkidle` wait times out (a stalled font or stylesheet behind a proxy), the snippet cancels the outstanding load with `window.stop()` and captures with fallback typography, printing a warning to stderr — pass that warning on to the user. Any other error propagates and fails the export normally.
 
 Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets or `3` for print/retina hero use, passed as a third CLI arg.
 
