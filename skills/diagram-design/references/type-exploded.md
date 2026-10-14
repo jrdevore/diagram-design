@@ -41,10 +41,10 @@ Draw faces as plain SVG `<path>` and `<polygon>` elements with the projected poi
 
 | Element | Light | Dark |
 |---|---|---|
-| Face base (opaque, under every face) | `#ffffff` | `paper-2` `#393e53` |
-| Top face | base | base + `rgba(245,245,245,0.10)` |
-| Left face (lit side) | base + `rgba(45,49,66,0.07)` | base |
-| Right face (shade side) | base + `rgba(45,49,66,0.15)` | base + `rgba(45,49,66,0.45)` |
+| Face base (opaque, under every face) | `#ffffff` | `paper-2` |
+| Top face | base | base + `ink @ 0.10` |
+| Left face (lit side) | base + `ink @ 0.07` | base |
+| Right face (shade side) | base + `ink @ 0.15` | base + `paper @ 0.45` |
 | Focal part, top / left / right | `accent` at 0.10 / 0.20 / 0.32 over base | `accent` at 0.18 top, neutral sides |
 | Silhouette | `ink`, 1.2 (`stroke-strong`) | `ink`, 1.2 |
 | Inner edges (top-front rim, front corner) | `ink` at 0.55, 0.8 (`stroke-thin`) | `ink` at 0.45, 0.8 |
@@ -55,14 +55,14 @@ Light comes from the top left, so the left face is lighter than the right. Alway
 
 ### Labels
 
-- One label per part, in one column to the right of the object. A label is the part name (Geist 600, 16px, one or two words) above a technical sublabel (Geist Mono 10px, `muted`, tracked 0.08em).
+- One label per part, in one column to the right of the object. A label is the part name (`node-name` role, 600, 16px, one or two words) above a technical sublabel (`sublabel` role, 10px, `muted`, tracked 0.08em).
 - A horizontal leader (0.8px, `ink` at 0.40) runs from 6px right of a 2px dot on the part's right extreme, at mid-thickness, to 12px left of the column. Leaders never bend, never cross a part, and never cross each other; horizontal leaders from distinct heights cannot cross each other, and the gap rule above keeps them clear of parts.
 - The focal part's dot, leader, and sublabel take the accent. Its name stays `ink`.
 - No numbered callouts and no legend. The label is on the part it names.
 
 ### Detail
 
-Three levels at most: the form (the rounded prism), insets on its top face (a screen, a cell outline, a moulded well), and micro detail (chips, lenses, a logo mark). Clip any inset that could reach a face edge to that face, keep it 4 units or more inside the edge, and stop at three levels. No contact shadow: shadows are out in this skin (SKILL.md §4). If the object needs grounding, the bottom part already provides it.
+Three levels at most: the form (the rounded prism), insets on its top face (a screen, a cell outline, a moulded well), and micro detail (chips, lenses, a logo mark). A part made of many identical pieces, such as keycaps or switches, declares the envelope of its grid as its box and paints one small prism per piece instead of the envelope; the silhouette path is still there for the verifier, with no fill. Clip any inset that could reach a face edge to that face, keep it 4 units or more inside the edge, and stop at three levels. No contact shadow: shadows are out in this skin (SKILL.md §4). If the object needs grounding, the bottom part already provides it.
 
 ### Focal part
 
@@ -84,8 +84,10 @@ An exploded view may open as the assembled object and explode once, because watc
 
 - The figure: one `<g data-exploded data-origin="ox oy" data-gap="g">` wrapping every part.
 - Each part: a `<g>` with `data-part` (key), `data-name` (the label text), `data-rect="x0 y0 x1 y1 r"`, `data-z`, `data-t`, `data-level`, optional `data-kind="housing"` for a container and `data-focal` for the focal part. Animated parts add `data-closed-z`.
-- Inside each part: the first `<path data-role="silhouette">` is the part's outline at its declared box, and a `<g data-role="label">` holds a `<line data-role="leader">` and a `<text data-role="name">`.
+- Inside each part: the first `<path data-role="silhouette">` is the part's outline at its declared box, and a `<g data-role="label">` holds a `<line data-role="leader">` and a `<text data-role="name">`. Its complete text, including inline `<tspan>` descendants, must match the part's `data-name`.
 - Trace lines carry `data-role="trace"`.
+
+The silhouette verifier accepts signed decimal and scientific-notation coordinates within the existing absolute M/L/A/Z path contract. Every operand must be finite; projected vertices, corner radii, and arc flags are still checked. This does not add relative path commands.
 
 ## Anti-patterns
 
@@ -106,5 +108,8 @@ An exploded view may open as the assembled object and explode once, because watc
 - `assets/example-exploded-full.html`: app stack, full editorial
 - `assets/example-exploded-phone.html`, `-dark`, `-full`: phone teardown with a housing, a shared board and battery level, and a display
 - `assets/example-exploded-unboxing.html`, `-dark`, `-full`: packaging with a telescoping lid, a product and cable on one level, an insert, and a box
+- `assets/example-exploded-ai-stack.html`, `-dark`, `-full`: an AI agent stack with a secrets vault, tools, skills as small cards on one layer, the agent harness around the model, and the interface
+- `assets/example-exploded-keyboard.html`, `-dark`, `-full`: a mechanical keyboard with a case tray, PCB, plate, a grid of switches, and a grid of keycaps
 - `assets/example-exploded-phone-animated.html`: the phone assembled, then exploded once
 - `assets/example-exploded-unboxing-animated.html`: the box closed, then unpacked once
+- `assets/example-exploded-ai-stack-animated.html`, `assets/example-exploded-keyboard-animated.html`: the stack and the keyboard assembled, then exploded once
