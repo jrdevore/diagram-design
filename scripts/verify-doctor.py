@@ -260,9 +260,13 @@ def check_playwright(python_cmd: str | None) -> CheckResult:
             (
                 "from playwright.sync_api import sync_playwright\n"
                 "with sync_playwright() as p:\n"
-                "    browser = p.chromium.launch(timeout=5000)\n"
                 "    try:\n"
-                "        print(browser.version)\n"
+                "        browser, label = p.chromium.launch(timeout=5000), 'Chromium'\n"
+                "    except Exception:\n"
+                "        # Same fallback as export.md: system Chrome when the managed browser is absent.\n"
+                "        browser, label = p.chromium.launch(channel='chrome', timeout=5000), 'system Chrome'\n"
+                "    try:\n"
+                "        print(label, browser.version)\n"
                 "    finally:\n"
                 "        browser.close()\n"
             ),
@@ -273,7 +277,7 @@ def check_playwright(python_cmd: str | None) -> CheckResult:
         return CheckResult(
             name="Playwright PNG export readiness",
             status=PASS,
-            message=f"Playwright is installed and Chromium {chromium_probe.stdout.strip()} launches for PNG export.",
+            message=f"Playwright is installed and {chromium_probe.stdout.strip()} launches for PNG export.",
         )
 
     detail = chromium_probe.stderr.strip() or "Chromium could not be launched"
