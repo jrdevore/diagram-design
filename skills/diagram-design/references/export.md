@@ -458,3 +458,33 @@ The user asks for a draw.io, diagrams.net, `.drawio` or "editable" version of a 
 - **`diagram-design-library.xml`**, for *File → Open Library from → Device*. It holds 16 ready-styled shapes and connectors.
 
 Colours are read from `style-guide.md`, so an onboarded brand palette carries over. Offer this when the user plans to keep editing in draw.io.
+
+## GIF export (animated diagrams)
+
+Turns a motion-enabled diagram (`data-step-count` present) into a looping GIF. Static diagrams can't be exported this way; offer PNG instead.
+
+### Trigger
+
+The user asks for a GIF, an animated image, or a "moving version" of an animated diagram, for example for Slack, a README or slides. Manual only.
+
+### Procedure
+
+1. Confirm the source has `data-step-count`. If it doesn't, say it's static and offer the PNG export.
+2. Run from this skill directory:
+   ```
+   python3 scripts/export_gif.py <diagram.html> [out.gif] [--scale N] [--hold MS] [--end-hold MS] [--fade MS] [--once]
+   ```
+   It captures each step through `?motion=step&step=N` (deterministic, no wall-clock waits) and crossfades the stills with ffmpeg. Default output is `<basename>.gif` next to the source.
+3. Relay its summary: steps, timing, length, and file size.
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--scale N` | 1 | Pixel scale (1–3); 2 for retina slides, at roughly 2–3× the file size |
+| `--hold MS` | the diagram's `--motion-hold`, else 900 | Time on each step |
+| `--end-hold MS` | 2000 | Time on the final, complete frame before looping |
+| `--fade MS` | 300 | Crossfade between steps; 0 = hard cuts, smallest file |
+| `--once` | off | Play once and stop instead of looping forever |
+
+Requirements: Playwright (falls back to system Chrome, like PNG export) and `ffmpeg` on PATH. If either is missing, show the install command and stop. Never auto-install.
+
+Tell the user that slides and draws become fades, the decorative flow-token loop isn't captured, the background is opaque (no GIF transparency), and only the diagram SVG is captured, not the HTML cards.
