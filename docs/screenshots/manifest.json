@@ -303,7 +303,7 @@
       "slug": "dp-integration",
       "source": "skills/diagram-design/assets/example-dp-integration.html",
       "screenshot": "docs/screenshots/dp-integration.png",
-      "source_sha256": "d1624ee510d25780522637141e89dd95165d6cefa6b5aded0c0ad1beca2ecf24",
+      "source_sha256": "d521d09532183ee10d5ebdcea9cbc509a45d90cd85c35973ba40dbe94f338291",
       "screenshot_sha256": "bf1a0d00141b0b10026bbf9c37ec0ac96af85d43555ca45d39ea1a0ee26d372f",
       "width": 2400,
       "height": 1330
@@ -415,6 +415,33 @@
       "screenshot_sha256": "b655659e0dad7fafa4f33517899f60db08279938b9274adbb0d6ad2e250d6783",
       "width": 2480,
       "height": 1288
+    },
+    {
+      "slug": "sbgn",
+      "source": "skills/diagram-design/assets/example-sbgn.html",
+      "screenshot": "docs/screenshots/sbgn.png",
+      "source_sha256": "58fb8b36be1a47d0bcf9a0eaefd4e9eabb3988f69024a184ec740726bc483253",
+      "screenshot_sha256": "1f9726b53d80ceba9e349584f163d48817fba62f5df4a501efa8fccb063faa53",
+      "width": 2400,
+      "height": 1442
+    },
+    {
+      "slug": "requirement-traceability",
+      "source": "skills/diagram-design/assets/example-requirement-traceability.html",
+      "screenshot": "docs/screenshots/requirement-traceability.png",
+      "source_sha256": "2714f14ef1b15264a566997ae523b46ca0c13a4f2cc145817f43eb78ae56de39",
+      "screenshot_sha256": "7e9c46dabe5ac42138fd55ed632736ba6d418b84ea09da13379dc9138da921f4",
+      "width": 2400,
+      "height": 1440
+    },
+    {
+      "slug": "event-modeling",
+      "source": "skills/diagram-design/assets/example-event-modeling.html",
+      "screenshot": "docs/screenshots/event-modeling.png",
+      "source_sha256": "142b4e758159448e05d31a3b3c55e0da12662920bd22bc9bd21c01cd85abeb74",
+      "screenshot_sha256": "9b16f4b4e6683ecb553312b9935cad1fd70de0711165a231bab4e2002f7ed8dc",
+      "width": 2400,
+      "height": 1440
     }
   ]
 }
